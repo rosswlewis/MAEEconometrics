@@ -1,0 +1,881 @@
+---
+title: "403A Project 1"
+author: "Ross Lewis, Qian (Alice) Li, Adam Jacobson, Chunxiao Jing"
+date: "October 24, 2018"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 1 a
+
+We will use the Affairs data from AER.
+
+```{r message=F}
+library(AER)
+library(ggplot2)
+library(reshape)
+library(boot)
+library("plotrix")
+```
+
+```{r}
+data("Affairs")
+m2=lm(Affairs$affairs~Affairs$age+Affairs$yearsmarried)
+summary(m2)
+
+##From the output, we are sure that the LS estimates of the two parameters is significant at 95%
+
+#use boot to estimate the Bootstrap estimates of the model parameters
+set.seed(1234)
+rsq <- function(formula, data, indices) {
+  d <- data[indices,]  
+  bootstrap <- lm(formula, data=d)
+  return(coef(bootstrap))
+} 
+
+results <- boot(data=Affairs, statistic=rsq, 
+                R=1000, formula=affairs~age+yearsmarried)
+
+```
+
+```{r}
+#estimate vs trial
+plot(results$t[,1],xlab="trial",ylab="intercept",main="Intercept vs Trial Number")#intercept
+plot(results$t[,2],xlab="trial",ylab="age",main="Age vs Trial Number")#age
+plot(results$t[,3],xlab="trial",ylab="yearsmarried",main="Yearsmarried vs Trial Number")#yearsmarried
+
+#ci vs trial
+ab<- function(formula, data, indices) {
+  d <- data[indices,]  
+  bootstrap <- lm(formula, data=d)
+  return(confint(bootstrap))
+} 
+
+ci <- boot(data=Affairs, statistic=ab, 
+           R=1000, formula=affairs~age+yearsmarried)
+
+##ci for intercept
+plotCI(x=1:1000,results$t[,1],ui=ci$t[,4],li=ci$t[,1],col="blue",scol="red",xlab="trial",ylab="intercept",main="trial for intercept")
+
+##ci for age
+plotCI(x=1:1000,results$t[,2],ui=ci$t[,5],li=ci$t[,2],col="blue",scol="red",xlab="trial",ylab="age",main="trial for age")
+
+##ci for yearsmarried
+plotCI(x=1:1000,results$t[,3],ui=ci$t[,6],li=ci$t[,3],col="blue",scol="red",xlab="trial",ylab="yearsmarried",main="trial for yearsmarried")
+
+```
+
+The results of parameters and CI change all the time through the 1000 trials. So the stability of bootstrap estimates is not very good.
+
+
+```{r}
+#compare estimats
+mean(results$t[,1])# intercept
+m2$coefficients[1]
+
+mean(results$t[,2])# age
+m2$coefficients[2]
+
+mean(results$t[,3])# yearsmarried
+m2$coefficients[3]
+
+#compare CI
+boot.ci(results, type="bca", index=1)
+boot.ci(results, type="bca", index=2) 
+boot.ci(results, type="bca", index=3) 
+confint(m2)
+```
+(1)The result of LS estimates is 1.534838 for intercept,-0.0449423 for age and 0.1688902 for yearsmarried. The the mean of overall bootstrap results is 1.505649 for intercept, -0.0432134 for age and 0.1651957 for yearsmarried. These values are quite close to each other. 
+
+(2)The confidence intervals of Bootstrap estimates is also close to that of LS estimates.In addition, it is noticed that the LS estimates is always in the CI
+of bootstrap, while the estimates of bootstrap is also in the CI of LS. 
+
+
+## 1 b
+
+```{r}
+library(ggplot2)
+library(bayesplot)
+library(MCMCpack)
+#use mcmc regression
+set.seed(1234)
+mcmc_regression<-MCMCregress(affairs~age+yearsmarried,data = Affairs)
+MCMC<-summary(mcmc_regression)
+MCMC
+#extract posterior from fitted model
+posterior<-as.array(mcmc_regression)
+dimnames(posterior)
+#plot posterior distribution
+color_scheme_set("blue")
+mcmc_hist(posterior,pars ="(Intercept)")+vline_at(v=MCMC$quantiles[1,1])+vline_at(v=MCMC$quantiles[1,5])+labs(title="Distribution for Intercept")
+mcmc_hist(posterior,pars ="age")+vline_at(v=MCMC$quantiles[2,1])+vline_at(v=MCMC$quantiles[2,5])+labs(title="Distribution for Age")
+mcmc_hist(posterior,pars ="yearsmarried")+vline_at(v=MCMC$quantiles[3,1])+vline_at(v=MCMC$quantiles[3,5])+labs(title="Distribution for Yearsmarried")
+```
+
+(1) The result of LS estimates is 1.534838 for intercept,-0.0449423 for age and 0.1688902 for yearsmarried. The result of MCMCregression is 1.53552 for intercept, -0.04508 for age and 0.16922 for yearsmarried. These values are also quite close to each other.
+
+(2) LS confidence intervals for parameters are (0.45922653, 2.6104497887) for intercept, (-0.08935362, -0.0005309759) for age and (0.09484536, 0.2429350150) for years married. And MCMCregression parameters' CI are (0.48136, 2.608247) for intercept,(-0.08904, -0.001961) for age and (0.09577, 0.243632) for yearsmarried. The vectors of two estimate methods are close.
+
+(3) Also, it is noticed that the LS estimates is always in the CI
+of bootstrap, while the estimates of bootstrap is also in the CI of LS. 
+
+## 1 c
+
+We think Bayesian regression is better.
+
+Though the parameters estimated from 3 different methods are quite close to each other, they still have some differences.
+
+(1) Bayesian vs LS: LS regression may be more useful is the sample size is large enough. However the number of observations in "Affairs" is 601, it is not large enough to get an unbiased result through LS regression. As for bayesian regression, it is suitable for a small sample size. So bayesian is better compared with LS regression
+
+(2) Bayesian vs Bootstrap: Bootstrap assumes that "sampling with replacement from the original sample of size n mimics taking a sample of size n from a larger population", but bootstrap may fail in a small sample size. In addition, bootstrap is only based on the original data, we cannot get more information from it.
+
+
+
+## 2 a
+
+```{r,message=FALSE}
+setwd("C:/Users/rossw/Documents/MAE Program/Econometrics 403A/Homework")
+#setwd("C:/Users/alice/OneDrive/Documents/R")
+library(Quandl)
+mykey="srRKGuDiUuuNeR1C_88u"
+```
+
+```{r}
+## S&P 500 index
+data_sp500<-Quandl("MULTPL/SP500_REAL_PRICE_MONTH", api_key="srRKGuDiUuuNeR1C_88u", collapse="monthly",stringsFactors=FALSE, start_date="1968-09-01",end_date="2018-09-01")
+sp500<-data_sp500$Value
+##S&P500 percentage change
+data_sp500$diff = c(-diff(data_sp500$Value, lag = 1),NA)
+data_sp500 <- data_sp500[complete.cases(data_sp500), ]
+##data_sp500$diff = na.omit(data_sp500$diff)
+data_sp500$perc = data_sp500$diff/(data_sp500$Value-data_sp500$diff)
+
+##Yield Spread
+data_yield<-Quandl("FRED/T10Y3M", api_key="srRKGuDiUuuNeR1C_88u", collapse="monthly", start_date="1968-09-01")
+yield<-data_yield$Value
+
+## Three month treasury rate
+data_rate3<-Quandl("FRED/TB3MS", api_key="srRKGuDiUuuNeR1C_88u", collapse="monthly", start_date="1968-09-01")
+rate3<-data_rate3$Value
+
+## Japanese Central Bank's interest rates
+## This data downlode from: https://fred.stlouisfed.org/series/IRSTCB01JPM156N
+data_Japan<-read.csv("interest-rate-in-Japan.csv",stringsAsFactors=FALSE)
+Japanrate<-data_Japan$IRSTCB01JPM156N   
+```
+
+Plot the histogram of the data and overlay the respective density curve.
+
+```{r}
+#data_sp500$perc
+hist(na.omit(data_sp500$perc),breaks=30,col="skyblue4",freq = FALSE,prob=TRUE,main ="S&P500 percentage change",xlab = "Percentage change of S&P500 ")
+lines(density(na.omit(data_sp500$perc)),col="red",lwd=2)
+rug(data_sp500$perc)
+
+```
+
+```{r}
+## Yield Spread 
+hist(yield,breaks=30,col="skyblue4",freq = FALSE,prob=TRUE,main = "Yield Spread ",xlab = " Yield Spread")
+lines(density(yield),col="red",lwd=2)
+rug(yield)
+```
+
+```{r}
+## Three month treasury rate
+hist(rate3,breaks=30,col="skyblue4",freq = FALSE,prob=TRUE,main = "Three month treasury rate ",xlab = " Three month treasury rate")
+lines(density(rate3),col="red",lwd=2)
+rug(rate3)
+#rate3[which(rate3 < 0)]
+```
+
+```{r}
+##Japanese Central Bank's interest rates
+hist(Japanrate,breaks=30,col="skyblue4",freq = FALSE,prob=TRUE,main = "Japanese Central Bank's interest rates ",xlab = " Japanese Central Bank's interest rates")
+lines(density(Japanrate),col="red",lwd=2)
+rug(Japanrate)
+```
+
+## 2 b  
+
+Fit a distribution to each histogram
+
+```{r,message=FALSE}
+library(fitdistrplus)
+```
+## Percentage change of S&P 500 
+```{r}
+## Percentage change of S&P 500 
+descdist(data_sp500$perc,boot = 1001)
+```
+From this graph, we can see Percentage change of S&P 500 may fit logistic ,normal and lognormal distribution. So we need further test:
+```{r}
+##fit logistic
+data_sp500$perc_10<-data_sp500$perc+10
+fitsp500_logis<-fitdist(data_sp500$perc_10,"logis")
+plot(fitsp500_logis)
+##fit normal
+fitsp500_norm<-fitdist(data_sp500$perc_10,"norm")
+plot(fitsp500_norm)
+##fit lognormal distribution
+fitsp500_lnorm<-fitdist(data_sp500$perc_10,"lnorm")
+plot(fitsp500_lnorm)
+par(mfrow=c(2,2))
+plot.legend<-c("logistic","normal","lognormal")
+cdfcomp(list(fitsp500_logis,fitsp500_norm,fitsp500_lnorm),legendtext=c("logistic","normal","lognormal"))
+denscomp(list(fitsp500_logis,fitsp500_norm,fitsp500_lnorm),legendtext=c("logistic","normal","lognormal"))
+qqcomp(list(fitsp500_logis,fitsp500_norm,fitsp500_lnorm),legendtext=c("logistic","normal","lognormal"))
+ppcomp(list(fitsp500_logis,fitsp500_norm,fitsp500_lnorm),legendtext=c("logistic","normal","lognormal"))
+gofstat(list(fitsp500_logis,fitsp500_norm,fitsp500_lnorm),fitnames=c("logistic","normal","lognormal"))
+```
+Because there are negtive values in the percentage changes of S&P 500, we add a constant to the returns first and then fit the distribution. It turns out that Percentage change of S&P 500 fits logistic distribution best.
+
+## Yield Spread
+```{r}
+descdist(yield,boot = 1001)
+```
+This variable may fit beta, uniform and normal distribution. So we choose these three distributions to have a further test.
+```{r}
+#fit beta distribution
+yield_b<-(yield-min(yield))/max((yield-min(yield)))
+fityield_beta<-fitdist(yield_b,"beta", method="mge")
+plot(fityield_beta)
+
+#fit uniform distribution
+fityield_unif<-fitdist(yield_b,"unif")
+plot(fityield_unif)
+##fit normal distribution
+fityield_norm<-fitdist(yield_b,"norm")
+plot(fityield_norm)
+
+par(mfrow=c(2,2))
+plot.legend<-c("beta","uniform","normal")
+cdfcomp(list(fityield_beta,fityield_unif,fityield_norm),legendtext=c("beta","unif","norm"))
+denscomp(list(fityield_beta,fityield_unif,fityield_norm),legendtext=c("beta","unif","norm"))
+qqcomp(list(fityield_beta,fityield_unif,fityield_norm),legendtext=c("beta","unif","norm"))
+ppcomp(list(fityield_beta,fityield_unif,fityield_norm),legendtext=c("beta","unif","norm"))
+gofstat(list(fityield_beta,fityield_unif,fityield_norm),fitnames=c("beta","unif","norm"))
+
+```
+From the ftiing grapghs of distribution and "R Console", we can conclude that Yield Spread fits well with the beta distribution.
+
+## Three month treasury rate
+```{r}
+descdist(rate3,boot = 1001)
+```
+This variable may fit gamma, normal and lognormal distribution. So we choose these three distributions to have a further test.
+```{r}
+##fit gamma distribution
+fitrate3_gamma<-fitdist(rate3,"gamma")
+plot(fitrate3_gamma)
+##fit normal
+fitrate3_norm<-fitdist(rate3,"norm")
+plot(fitrate3_norm)
+##fit lnorm
+fitrate3_lnorm<-fitdist(rate3,"lnorm")
+plot(fitrate3_lnorm)
+
+par(mfrow=c(2,2))
+plot.legend<-c("gamma","normal","lognormal")
+cdfcomp(list(fitrate3_gamma,fitrate3_norm,fitrate3_lnorm),legendtext=c("gamma","normal","lognormal"))
+denscomp(list(fitrate3_gamma,fitrate3_norm,fitrate3_lnorm),legendtext=c("gamma","normal","lognormal"))
+qqcomp(list(fitrate3_gamma,fitrate3_norm,fitrate3_lnorm),legendtext=c("gamma","normal","lognormal"))
+ppcomp(list(fitrate3_gamma,fitrate3_norm,fitrate3_lnorm),legendtext=c("gamma","normal","lognormal"))
+gofstat(list(fitrate3_gamma,fitrate3_norm,fitrate3_lnorm),fitnames=c("gamma","normal","lognormal"))
+
+```
+
+From the graphs, we know that three month treasury rate fits normal distribution well.
+
+##Japanese Central Bank's interest rates
+```{r}
+descdist(Japanrate,boot = 1001)
+```
+This variable may fit beta and uniform distribution. So we choose these distributions to have a further test.
+```{r}
+##fit beta
+Japanrate_b<-(Japanrate-min(Japanrate))/max(Japanrate-min(Japanrate))
+fitJapanrate_beta<-fitdist(Japanrate_b,"beta", method = "mge")
+plot(fitJapanrate_beta)
+##fit uniform
+fitJapanrate_unif<-fitdist(Japanrate_b,"unif")
+plot(fitJapanrate_unif)
+
+par(mfrow=c(2,2))
+plot.legend<-c("beta","unif")
+cdfcomp(list(fitJapanrate_beta,fitJapanrate_unif),legendtext=c("beta","unif"))
+denscomp(list(fitJapanrate_beta,fitJapanrate_unif),legendtext=c("beta","unif"),ylim = (0:4))
+qqcomp(list(fitJapanrate_beta,fitJapanrate_unif),legendtext=c("beta","unif"))
+ppcomp(list(fitJapanrate_beta,fitJapanrate_unif),legendtext=c("beta","unif"))
+gofstat(list(fitJapanrate_beta,fitJapanrate_unif),fitnames=c("beta","unif"))
+```
+Japanese Central Bank's interest rates fits the beta distribution well.
+
+## 2 c 
+```{r,message=F}
+##install.packages("dplyr")
+library(dplyr)
+```
+##Percentage changes of S&P500 within recession years
+```{r}
+recession500 = subset(data_sp500, data_sp500$Date > '1969-11-30' & data_sp500$Date < '1970-12-02')
+recession500 = rbind(recession500,subset(data_sp500, data_sp500$Date > '1973-11-01' & data_sp500$Date < '1975-04-02'))
+recession500 = rbind(recession500,subset(data_sp500, data_sp500$Date > '1980-01-01' & data_sp500$Date < '1980-08-01'))
+recession500 = rbind(recession500,subset(data_sp500, data_sp500$Date > '1981-07-01' & data_sp500$Date < '1982-12-01'))
+recession500 = rbind(recession500,subset(data_sp500, data_sp500$Date > '1990-07-01' & data_sp500$Date < '1991-04-01'))
+recession500 = rbind(recession500,subset(data_sp500, data_sp500$Date > '2001-03-01' & data_sp500$Date < '2001-12-01'))
+recession500 = rbind(recession500,subset(data_sp500, data_sp500$Date > '2007-12-01' & data_sp500$Date < '2009-07-01'))
+##histgram and density curve
+hist(recession500$perc,breaks=30,col="skyblue4",freq = FALSE,prob=TRUE,main = "Histogram & density curve of S&P 500 change in recession",xlab = "S&P500 percentage change within recession years")
+lines(density(recession500$perc),col="red",lwd=2)
+rug(recession500$perc)
+```
+Fit distribution
+```{r}
+descdist(recession500$Value,boot = 1001)
+```
+From this graph, we can see Percentage change of S&P 500 may fit beta and uniform distribution. So we need further test:
+```{r}
+#fit beta distribution
+recession500$Value_b<-(recession500$Value-min(recession500$Value))/max((recession500$Value-min(recession500$Value)))
+fitsp500_beta<-fitdist(recession500$Value_b,"beta", method="mge")
+plot(fitsp500_beta)
+#fit uniform
+fitsp500_unif<-fitdist(recession500$Value_b,"unif")
+plot(fitsp500_unif)
+#fit normal
+fitsp500_norm<-fitdist(recession500$Value_b,"norm")
+plot(fitsp500_norm)
+
+par(mfrow=c(2,2))
+plot.legend<-c("beta","uniform","normal")
+cdfcomp(list(fitsp500_beta,fitsp500_unif,fitsp500_norm),legendtext=c("beta","unif","norm"))
+denscomp(list(fitsp500_beta,fitsp500_unif,fitsp500_norm),legendtext=c("beta","unif","norm"),ylim = (0:6))
+qqcomp(list(fitsp500_beta,fitsp500_unif,fitsp500_norm),legendtext=c("beta","unif","norm"))
+ppcomp(list(fitsp500_beta,fitsp500_unif,fitsp500_norm),legendtext=c("beta","unif","norm"))
+gofstat(list(fitsp500_beta,fitsp500_unif,fitsp500_norm),fitnames=c("beta","unif","norm"))
+
+```
+From the graphs, we can see that the percentage changes of S&P500 within recession years fits beta distribution well.
+
+## Yield Spread within recession years
+```{r}
+recessionyield = subset (data_yield,data_yield$Date > '1969-11-30' & data_yield$Date < '1970-12-02')
+recessionyield = rbind(recessionyield,subset(data_yield, data_yield$Date > '1973-11-01' & data_yield$Date < '1975-04-02'))
+recessionyield = rbind(recessionyield,subset(data_yield, data_yield$Date > '1980-01-01' & data_yield$Date < '1980-08-01'))
+recessionyield = rbind(recessionyield,subset(data_yield, data_yield$Date > '1981-07-01' & data_yield$Date < '1982-12-01'))
+recessionyield = rbind(recessionyield,subset(data_yield, data_yield$Date > '1990-07-01' & data_yield$Date < '1991-04-01'))
+recessionyield = rbind(recessionyield,subset(data_yield, data_yield$Date > '2001-03-01' & data_yield$Date < '2001-12-01'))
+recessionyield = rbind(recessionyield,subset(data_yield, data_yield$Date > '2007-12-01' & data_yield$Date < '2009-07-01'))
+##histgram
+hist(recessionyield$Value,breaks=30,col="skyblue4",freq = FALSE,prob=TRUE,main = "Histogram & density curve of Yield Spread in recession")
+lines(density(recessionyield$Value),col="red",lwd=2)
+rug(recessionyield$Value)
+```
+Fit distribution
+```{r}
+descdist(recessionyield$Value,boot = 1001)
+```
+From this graph, we assume that Yield Spread within recession years may fit beta,uniform and normal distribution. Here we have some further test:
+```{r}
+#fit beta distribution
+recessionyield$Value_b<-(recessionyield$Value-min(recessionyield$Value))/max((recessionyield$Value-min(recessionyield$Value)))
+fityield_beta<-fitdist(recessionyield$Value_b,"beta", method="mge")
+plot(fityield_beta)
+
+#fit uniform distribution
+fityield_unif<-fitdist(recessionyield$Value_b,"unif")
+plot(fityield_unif)
+##fit normal distribution
+fityield_norm<-fitdist(recessionyield$Value_b,"norm")
+plot(fityield_norm)
+
+par(mfrow=c(2,2))
+plot.legend<-c("beta","uniform","normal")
+cdfcomp(list(fityield_beta,fityield_unif,fityield_norm),legendtext=c("beta","unif","norm"))
+denscomp(list(fityield_beta,fityield_unif,fityield_norm),legendtext=c("beta","unif","norm"))
+qqcomp(list(fityield_beta,fityield_unif,fityield_norm),legendtext=c("beta","unif","norm"))
+ppcomp(list(fityield_beta,fityield_unif,fityield_norm),legendtext=c("beta","unif","norm"))
+gofstat(list(fityield_beta,fityield_unif,fityield_norm),fitnames=c("beta","unif","norm"))
+```
+From the fitting grapghs of distribution and "R Console", we can conclude that Yield Spread in recession years fits well with the beta distribution.
+
+##Three month treasury rate in recession years
+```{r}
+recessionrate3 = subset(data_rate3, data_rate3$Date > '1969-11-30' & data_rate3$Date < '1970-12-02')
+recessionrate3 = rbind(recessionrate3,subset(data_rate3, data_rate3$Date > '1973-11-01' & data_yield$Date < '1975-04-02'))
+recessionrate3 = rbind(recessionrate3,subset(data_rate3, data_rate3$Date > '1980-01-01' & data_rate3$Date < '1980-08-01'))
+recessionrate3 = rbind(recessionrate3,subset(data_rate3, data_rate3$Date > '1981-07-01' & data_rate3$Date < '1982-12-01'))
+recessionrate3 = rbind(recessionrate3,subset(data_rate3, data_rate3$Date > '1990-07-01' & data_rate3$Date < '1991-04-01'))
+recessionrate3 = rbind(recessionrate3,subset(data_rate3, data_rate3$Date > '2001-03-01' & data_rate3$Date < '2001-12-01'))
+recessionrate3 = rbind(recessionrate3,subset(data_rate3, data_rate3$Date > '2007-12-01' & data_rate3$Date < '2009-07-01'))
+#hist
+hist(recessionrate3$Value,breaks=30,col="skyblue4",freq = FALSE,prob=TRUE,main = "Histogram & density curve of three month treasury rate in recession")
+lines(density(recessionrate3$Value),col="red",lwd=2)
+rug(recessionrate3$Value)
+```
+fit distribution
+```{r}
+descdist(recessionrate3$Value,boot = 1001)
+```
+This variable may fit beta nornal and uniform distribution. So we choose these three distributions to have a further test.
+```{r}
+##fit beta distribution
+recessionrate3$Value_b<-(recessionrate3$Value-min(recessionrate3$Value))/max(recessionrate3$Value-min(recessionrate3$Value))
+fitrate3_beta<-fitdist(recessionrate3$Value_b,"beta", method="mge")
+plot(fitrate3_beta)
+##fit normal
+fitrate3_norm<-fitdist(recessionrate3$Value_b,"norm")
+plot(fitrate3_norm)
+##fit uniform
+fitrate3_unif<-fitdist(recessionrate3$Value_b,"unif")
+plot(fitrate3_unif)
+
+par(mfrow=c(2,2))
+plot.legend<-c("beta","normal","uniform")
+cdfcomp(list(fitrate3_beta,fitrate3_norm,fitrate3_unif),legendtext=c("beta","normal","uniform"))
+denscomp(list(fitrate3_beta,fitrate3_norm,fitrate3_unif),legendtext=c("beta","normal","uniform"),ylim = (0:2))
+qqcomp(list(fitrate3_beta,fitrate3_norm,fitrate3_unif),legendtext=c("beta","normal","uniform"))
+ppcomp(list(fitrate3_beta,fitrate3_norm,fitrate3_unif),legendtext=c("beta","normal","uniform"))
+gofstat(list(fitrate3_beta,fitrate3_norm,fitrate3_unif),fitnames=c("beta","normal","uniform"))
+
+```
+From the graphs, Three month treasury rate in recession years fits the normal distribution well.
+
+##Japanese Central Bank's interest rates in recession years
+##Find the recession years defined by OECD. Retrived from: https://fred.stlouisfed.org/series/DEUREC
+```{r}
+recessionJapan=subset(data_Japan, data_Japan$DATE < '1970-09-01' )
+recessionJapan = rbind(recessionJapan, subset(data_Japan, data_Japan$DATE > '1968-09-01' & data_Japan$DATE < '1970-09-01'))
+recessionJapan = rbind(recessionJapan,subset(data_Japan, data_Japan$DATE > '1973-11-01' & data_Japan$DATE < '1975-04-02'))
+recessionJapan = rbind(recessionJapan,subset(data_Japan, data_Japan$DATE > '1972-03-01' & data_Japan$DATE < '1973-04-30'))
+recessionJapan = rbind(recessionJapan,subset(data_Japan, data_Japan$DATE > '1975-07-01' & data_Japan$DATE < '1979-11-30'))
+recessionJapan = rbind(recessionJapan,subset(data_Japan, data_Japan$DATE > '1982-12-01' & data_Japan$DATE < '1985-09-30'))
+recessionJapan = rbind(recessionJapan,subset(data_Japan, data_Japan$DATE > '1993-10-01' & data_Japan$DATE < '1995-06-30'))
+recessionJapan = rbind(recessionJapan,subset(data_Japan, data_Japan$DATE > '1996-04-01' & data_Japan$DATE < '1998-03-01'))
+recessionJapan = rbind(recessionJapan,subset(data_Japan, data_Japan$DATE > '1999-02-01' & data_Japan$DATE < '2001-06-01'))
+recessionJapan = rbind(recessionJapan,subset(data_Japan, data_Japan$DATE > '2005-03-01' & data_Japan$DATE < '2008-03-01'))
+recessionJapan = rbind(recessionJapan,subset(data_Japan, data_Japan$DATE > '2009-07-01' & data_Japan$DATE < '2011-08-01'))
+recessionJapan = rbind(recessionJapan,subset(data_Japan, data_Japan$DATE > '2013-05-01' & data_Japan$DATE < '2014-04-01'))
+recessionJapan = rbind(recessionJapan,subset(data_Japan, data_Japan$DATE > '2015-10-01' & data_Japan$DATE < '2017-10-01'))
+
+hist(recessionJapan$IRSTCB01JPM156N,breaks=30,col="skyblue4",freq = FALSE,prob=TRUE,main = "Histogram & density curve of JCB's interest rates in recession")
+lines(density(recessionJapan$IRSTCB01JPM156N),col="red",lwd=2)
+rug(recessionJapan$IRSTCB01JPM156N)
+```
+fit distribution
+```{r}
+descdist(recessionJapan$IRSTCB01JPM156N,boot = 1001)
+```
+This variable may fit beta and uniform distribution. So we choose these distributions to have a further test.
+```{r}
+##fit beta
+recessionJapan$IRSTCB01JPM156N_b<-(recessionJapan$IRSTCB01JPM156N-min(recessionJapan$IRSTCB01JPM156N))/max(recessionJapan$IRSTCB01JPM156N-min(recessionJapan$IRSTCB01JPM156N))
+fitJapanrate_beta<-fitdist(recessionJapan$IRSTCB01JPM156N_b,"beta", method = "mge")
+plot(fitJapanrate_beta)
+##fit uniform
+fitJapanrate_unif<-fitdist(recessionJapan$IRSTCB01JPM156N_b,"unif")
+plot(fitJapanrate_unif)
+
+par(mfrow=c(2,2))
+plot.legend<-c("beta","unif")
+cdfcomp(list(fitJapanrate_beta,fitJapanrate_unif),legendtext=c("beta","unif"))
+denscomp(list(fitJapanrate_beta,fitJapanrate_unif),legendtext=c("beta","unif"),ylim = (0:4))
+qqcomp(list(fitJapanrate_beta,fitJapanrate_unif),legendtext=c("beta","unif"))
+ppcomp(list(fitJapanrate_beta,fitJapanrate_unif),legendtext=c("beta","unif"))
+gofstat(list(fitJapanrate_beta,fitJapanrate_unif),fitnames=c("beta","unif"))
+
+```
+From the graphs, we can see that Japanese Central Bank's interest rates in recession fits the beta distribution well.
+
+## 2 d
+##S&P500 percentage change with non-recession years
+```{r}
+nonrecession500 = subset(data_sp500, data_sp500$Date < '1969-11-30' )
+nonrecession500 = rbind(nonrecession500,subset(data_sp500, data_sp500$Date > '1970-12-02' & data_sp500$Date > '1973-11-01'))
+nonrecession500 = rbind(nonrecession500,subset(data_sp500, data_sp500$Date > '1975-04-02' & data_sp500$Date < '1980-01-01'))
+nonrecession500 = rbind(nonrecession500,subset(data_sp500, data_sp500$Date > '1980-08-01' & data_sp500$Date < '1981-07-01'))
+nonrecession500 = rbind(nonrecession500,subset(data_sp500, data_sp500$Date > '1982-12-01' & data_sp500$Date <'1990-07-01' ))
+nonrecession500 = rbind(nonrecession500,subset(data_sp500, data_sp500$Date > '1991-04-01' & data_sp500$Date < '2001-03-01'))
+nonrecession500 = rbind(nonrecession500,subset(data_sp500, data_sp500$Date > '2001-12-01' & data_sp500$Date < '2007-12-01'))
+nonrecession500 = rbind(nonrecession500,subset(data_sp500, data_sp500$Date > '2009-07-01'))
+##hist
+hist(nonrecession500$perc,breaks=30,col="skyblue4",freq = FALSE,prob=TRUE,main = "Histogram & density curve of s&p 500 percentage change in non-recession")
+lines(density(nonrecession500$perc),col="red",lwd=2)
+rug(nonrecession500$perc)
+```
+Fit distribution
+```{r}
+descdist(nonrecession500$Value,boot = 1001)
+```
+From this graph, we assume that Yield Spread S&P500 percentage change with non-recession years may fit beta distribution. Here we have some further test:
+```{r}
+#fit beta distribution
+nonrecession500$Value_b<-(nonrecession500$Value-min(nonrecession500$Value))/max((nonrecession500$Value-min(nonrecession500$Value)))
+fitsp500_beta<-fitdist(nonrecession500$Value_b,"beta", method="mge")
+plot(fitsp500_beta)
+
+```
+From grapghs, we can conclude that S&P500 percentage change with non-recession years fits well with the beta distribution.
+
+## Yield Spread with non-recession years
+```{r}
+nonrecessionyield = subset(data_yield,data_yield$Date< '1969-11-30')
+nonrecessionyield = rbind(nonrecessionyield,subset(data_yield, data_yield$Date > '1970-12-02' & data_yield$Date < '1973-11-01'))
+nonrecessionyield = rbind(nonrecessionyield,subset(data_yield, data_yield$Date > '1975-04-02' & data_yield$Date < '1980-01-01'))
+nonrecessionyield = rbind(nonrecessionyield,subset(data_yield, data_yield$Date > '1980-08-01' & data_yield$Date < '1981-07-01'))
+nonrecessionyield = rbind(nonrecessionyield,subset(data_yield, data_yield$Date >  '1982-12-01'& data_yield$Date < '1990-07-01'))
+nonrecessionyield = rbind(nonrecessionyield,subset(data_yield, data_yield$Date > '1991-04-01' & data_yield$Date < '2001-03-01'))
+nonrecessionyield = rbind(nonrecessionyield,subset(data_yield, data_yield$Date > '2001-12-01' & data_yield$Date <'2007-12-01' ))
+nonrecessionyield = rbind(nonrecessionyield,subset(data_yield, data_yield$Date > '2009-07-01'))
+##histgram
+hist(nonrecessionyield$Value,breaks=30,col="skyblue4",freq = FALSE,prob=TRUE,main = "Histogram & density curve of Yield Spread in non-recession")
+lines(density(nonrecessionyield$Value),col="red",lwd=2)
+rug(nonrecessionyield$Value)
+```
+Fit distribution
+```{r}
+descdist(nonrecessionyield$Value,boot = 1001)
+```
+From this graph, we assume that Yield Spread in non-recession years may fit beta and uniform distribution. Here we have some further test:
+```{r}
+#fit beta distribution
+nonrecessionyield$Value_b<-(nonrecessionyield$Value-min(nonrecessionyield$Value))/max((nonrecessionyield$Value-min(nonrecessionyield$Value)))
+fityield_beta<-fitdist(nonrecessionyield$Value_b,"beta", method="mge")
+plot(fityield_beta)
+
+#fit uniform distribution
+fityield_unif<-fitdist(nonrecessionyield$Value_b,"unif")
+plot(fityield_unif)
+
+par(mfrow=c(2,2))
+plot.legend<-c("beta","uniform")
+cdfcomp(list(fityield_beta,fityield_unif),legendtext=c("beta","unif"))
+denscomp(list(fityield_beta,fityield_unif),legendtext=c("beta","unif"))
+qqcomp(list(fityield_beta,fityield_unif),legendtext=c("beta","unif"))
+ppcomp(list(fityield_beta,fityield_unif),legendtext=c("beta","unif"))
+gofstat(list(fityield_beta,fityield_unif),fitnames=c("beta","unif"))
+```
+From the ftiing grapghs of distribution and "R Console", we can conclude that Yield Spread in non-recession years fits well with the beta distribution.
+
+##Three month treasury rate in non-recession years
+```{r}
+nonrecessionrate3=subset(data_rate3,data_rate3$Date< '1969-11-30')
+nonrecessionrate3 = rbind(nonrecessionrate3,subset(recessionyield, data_yield$Date > '1970-12-02' & data_yield$Date < '1973-11-01'))
+nonrecessionrate3 = rbind(nonrecessionrate3,subset(data_rate3, data_rate3$Date > '1975-04-02'& data_rate3$Date < '1980-01-01'))
+nonrecessionrate3 = rbind(nonrecessionrate3,subset(data_rate3, data_rate3$Date > '1980-08-01' & data_rate3$Date < '1981-07-01'))
+nonrecessionrate3 = rbind(nonrecessionrate3,subset(data_rate3, data_rate3$Date > '1982-12-01' & data_rate3$Date < '1990-07-01'))
+nonrecessionrate3 = rbind(nonrecessionrate3,subset(data_rate3, data_rate3$Date > '1991-04-01' & data_rate3$Date <'2001-03-01' ))
+nonrecessionrate3 = rbind(nonrecessionrate3,subset(data_rate3, data_rate3$Date > '2001-12-01' & data_rate3$Date < '2007-12-01'))
+nonrecessionrate3 = rbind(nonrecessionrate3,subset(data_rate3, data_rate3$Date > '2009-07-01'))
+#hist
+hist(nonrecessionrate3$Value,breaks=30,col="skyblue4",freq = FALSE,prob=TRUE,main = "Histogram & density curve of three month treasury rate in non-recession")
+lines(density(nonrecessionrate3$Value),col="red",lwd=2)
+rug(nonrecessionrate3$Value)
+```
+fit distribution
+```{r}
+descdist(nonrecessionrate3$Value,boot = 1001)
+```
+This variable may fit beta normal, uniform, and gamma distribution. So we choose these distributions to have a further test.
+```{r}
+##fit beta distribution
+nonrecessionrate3$Value_b<-(nonrecessionrate3$Value-min(nonrecessionrate3$Value))/max(nonrecessionrate3$Value-min(nonrecessionrate3$Value))
+fitrate3_beta<-fitdist(nonrecessionrate3$Value_b,"beta", method="mge")
+plot(fitrate3_beta)
+##fit normal
+fitrate3_norm<-fitdist(nonrecessionrate3$Value_b,"norm")
+plot(fitrate3_norm)
+##fit uniform
+fitrate3_unif<-fitdist(nonrecessionrate3$Value_b,"unif")
+plot(fitrate3_unif)
+##fit gamma
+fitrate3_gamma<-fitdist(nonrecessionrate3$Value_b,"gamma", method="mge")
+plot(fitrate3_gamma)
+
+
+par(mfrow=c(2,2))
+plot.legend<-c("beta","normal","uniform","gamma")
+cdfcomp(list(fitrate3_beta,fitrate3_norm,fitrate3_unif,fitrate3_gamma),legendtext=c("beta","normal","uniform","gamma"))
+denscomp(list(fitrate3_beta,fitrate3_norm,fitrate3_unif,fitrate3_gamma),legendtext=c("beta","normal","uniform","gamma"))
+qqcomp(list(fitrate3_beta,fitrate3_norm,fitrate3_unif,fitrate3_gamma),legendtext=c("beta","normal","uniform","gamma"))
+ppcomp(list(fitrate3_beta,fitrate3_norm,fitrate3_unif,fitrate3_gamma),legendtext=c("beta","normal","uniform","gamma"))
+gofstat(list(fitrate3_beta,fitrate3_norm,fitrate3_unif,fitrate3_gamma),fitnames=c("beta","normal","uniform","gamma"))
+```
+Three month treasury rate in non-recession years fits the normal distribution well.
+
+##Japanese Central Bank's interest rates in nonrecession years
+```{r}
+nonrecessionJapan = subset(data_Japan, data_Japan$DATE > '1970-09-01' & data_Japan$DATE < '1972-03-01')
+nonrecessionJapan = rbind(nonrecessionJapan,subset(data_Japan, data_Japan$DATE > '1973-04-30' & data_Japan$DATE < '1975-07-01'))
+nonrecessionJapan = rbind(nonrecessionJapan,subset(data_Japan, data_Japan$DATE > '1979-11-30' & data_Japan$DATE < '1982-12-01'))
+nonrecessionJapan = rbind(nonrecessionJapan,subset(data_Japan, data_Japan$DATE > '1985-09-30' & data_Japan$DATE <'1987-05-01' ))
+nonrecessionJapan = rbind(nonrecessionJapan,subset(data_Japan, data_Japan$DATE >  '1991-03-30'& data_Japan$DATE < '1993-10-01'))
+nonrecessionJapan = rbind(nonrecessionJapan,subset(data_Japan, data_Japan$DATE > '1995-06-30' & data_Japan$DATE <'1996-04-01' ))
+nonrecessionJapan = rbind(nonrecessionJapan,subset(data_Japan, data_Japan$DATE > '1998-03-01' & data_Japan$DATE < '1999-02-01'))
+nonrecessionJapan = rbind(nonrecessionJapan,subset(data_Japan, data_Japan$DATE > '2001-06-01' & data_Japan$DATE < '2005-03-01'))
+nonrecessionJapan = rbind(nonrecessionJapan,subset(data_Japan, data_Japan$DATE > '2008-03-01' & data_Japan$DATE < '2009-07-01'))
+nonrecessionJapan = rbind(nonrecessionJapan,subset(data_Japan, data_Japan$DATE > '2011-08-01' & data_Japan$DATE < '2013-05-01'))
+nonrecessionJapan = rbind(nonrecessionJapan,subset(data_Japan, data_Japan$DATE > '2014-04-01' & data_Japan$DATE < '2015-10-01'))
+nonrecessionJapan = rbind(nonrecessionJapan,subset(data_Japan, data_Japan$DATE > '2017-10-01' ))
+
+hist(nonrecessionJapan$IRSTCB01JPM156N,breaks=30,col="skyblue4",freq = FALSE,prob=TRUE,main = "Histogram & density curve of JCB's interest rates in non-recession")
+lines(density(nonrecessionJapan$IRSTCB01JPM156N),col="red",lwd=2)
+rug(nonrecessionJapan$IRSTCB01JPM156N)
+```
+fit distribution
+```{r}
+descdist(nonrecessionJapan$IRSTCB01JPM156N,boot = 1001)
+```
+This variable may fit beta and uniform distribution. So we choose these distributions to have a further test.
+```{r}
+##fit beta
+nonrecessionJapan$IRSTCB01JPM156N_b<-(nonrecessionJapan$IRSTCB01JPM156N-min(nonrecessionJapan$IRSTCB01JPM156N))/max(nonrecessionJapan$IRSTCB01JPM156N-min(nonrecessionJapan$IRSTCB01JPM156N))
+fitJapanrate_beta<-fitdist(nonrecessionJapan$IRSTCB01JPM156N_b,"beta", method = "mge")
+plot(fitJapanrate_beta)
+##fit uniform
+fitJapanrate_unif<-fitdist(nonrecessionJapan$IRSTCB01JPM156N_b,"unif")
+plot(fitJapanrate_unif)
+
+par(mfrow=c(2,2))
+plot.legend<-c("beta","unif")
+cdfcomp(list(fitJapanrate_beta,fitJapanrate_unif),legendtext=c("beta","unif"))
+denscomp(list(fitJapanrate_beta,fitJapanrate_unif),legendtext=c("beta","unif"),ylim = (0:4))
+qqcomp(list(fitJapanrate_beta,fitJapanrate_unif),legendtext=c("beta","unif"))
+ppcomp(list(fitJapanrate_beta,fitJapanrate_unif),legendtext=c("beta","unif"))
+gofstat(list(fitJapanrate_beta,fitJapanrate_unif),fitnames=c("beta","unif"))
+
+```
+Japanese Central Bank's interest rates in nonrecession years fits the beta distribution well.
+
+## 2 e
+
+About the data value, our intuition tells us that during the recession years, the changes in the S&P 500 will be more negative, the Yield Spread will be smaller, the interest rates will go down, and the Japanese Central Bank's interest rates will go down. The histgrams show that our intuitioin is correct. 
+
+As for the distribution, there is noticeable differences between the estimated distributions based on how we subset the data.It's because the situations of economy in recession and in non-recession are totally diffrent. In recession years, economy is not good and it will display in the data values, which will influence distribution. 
+
+## 2 f
+
+```{r}
+# Do x and y come from the same distribution?
+#ks.test(x, y)
+##S&P500 percentage change
+ks.test(recession500$perc,nonrecession500$perc)
+## Yield Spread
+ks.test(recessionyield$Value,nonrecessionyield$Value)
+##Three month treasury rate
+ks.test(recessionrate3$Value,nonrecessionrate3$Value)
+##Japanese Central Bank's interest rates
+ks.test(recessionJapan$IRSTCB01JPM156N,nonrecessionJapan$IRSTCB01JPM156N)
+```
+Except the Yield Spread, other variables have small D and p-value in K-T test, so we should reject the null, which means the pairs of values we test come from different distributions. As fot the Yield Spread, its D = 0.17248, p-value = 0.1567, which means Yield Spread in recession and nonrecession come from the same distribution. But we still can draw the conclution that there are noticeable differences between
+the estimated distributions based on how you subset the data. So that's why when we predict the economy and design our model, we should try to capture diffrent economic states.
+
+
+
+## 3 a
+Microsoft is the most aggresive firm and Exxon is the most defensive firm according the beta values.
+```{r}
+## get data from excel
+library(readxl)
+capmdat <- read_excel("C:/Users/rossw/Documents/MAE Program/Econometrics 403A/Homework/capm4.xlsx")
+
+##  perform regressions
+regdis=lm(capmdat$dis-capmdat$riskfree ~ (capmdat$mkt-capmdat$riskfree))
+regge=lm(capmdat$ge-capmdat$riskfree ~ (capmdat$mkt-capmdat$riskfree))
+reggm=lm(capmdat$gm-capmdat$riskfree ~ (capmdat$mkt-capmdat$riskfree))
+regibm=lm(capmdat$ibm-capmdat$riskfree ~ (capmdat$mkt-capmdat$riskfree))
+regmsft=lm(capmdat$msft-capmdat$riskfree ~ (capmdat$mkt-capmdat$riskfree))
+regxom=lm(capmdat$xom-capmdat$riskfree ~ (capmdat$mkt-capmdat$riskfree))
+## get max and min betas to determine most aggresive and defensive firm
+cof= cbind(coefficients(regdis), coefficients(regge),coefficients(reggm),coefficients(regibm),coefficients(regmsft),coefficients(regxom))
+colnames(cof)=c("dis","ge","gm","ibm","msft","xom")
+rownames(cof)=c("Intercept","Betas")
+cof
+rownames(cof)=c("Intercept", "Beta")
+apply(cof, 1, FUN=max) #microsoft
+apply(cof, 1, FUN=min) #exxon
+```
+
+## 3 b
+The values of the intercepts of our regression do seem to be close to 0.
+```{r}
+##plot microsoft scatter and regression
+library(readxl)
+capmdat <- read_excel("C:/Users/rossw/Documents/MAE Program/Econometrics 403A/Homework/capm4.xlsx")
+regmsft=lm(capmdat$msft-capmdat$riskfree ~ (capmdat$mkt-capmdat$riskfree))
+plot(capmdat$msft-capmdat$riskfree, capmdat$mkt-capmdat$riskfree, xlab ="Microsoft Return Less Risk Free Return", ylab="Market Return Less Risk Free Return")
+abline(regmsft)
+```
+
+## 3 c
+The estimates of the beta values change very little.
+```{r}
+## regress with forced 0 intercept
+regdis0=lm(capmdat$dis-capmdat$riskfree ~ (0 + capmdat$mkt-capmdat$riskfree))
+regge0=lm(capmdat$ge-capmdat$riskfree ~ (0 + capmdat$mkt-capmdat$riskfree))
+reggm0=lm(capmdat$gm-capmdat$riskfree ~ (0 + capmdat$mkt-capmdat$riskfree))
+regibm0=lm(capmdat$ibm-capmdat$riskfree ~ (0 + capmdat$mkt-capmdat$riskfree))
+regmsft0=lm(capmdat$msft-capmdat$riskfree ~ (0 + capmdat$mkt-capmdat$riskfree))
+regxom0=lm(capmdat$xom-capmdat$riskfree ~ (0 + capmdat$mkt-capmdat$riskfree))
+
+cof0=cbind(coefficients(regdis0), coefficients(regge0),coefficients(reggm0),coefficients(regibm0),coefficients(regmsft0),coefficients(regxom0))
+rownames(cof0)=c("Beta")
+
+#Slope with intercept = 0 compared to original slope
+cof0
+cof
+
+## confidence intervals
+condis0=confint(regdis0, level=0.95)
+conge0=confint(regge0, level=0.95)
+congm0=confint(reggm0, level=0.95)
+conibm0=confint(regibm0, level=0.95)
+conmsft0=confint(regmsft0, level=0.95)
+conxom0=confint(regxom0, level=0.95)
+conint=cbind(condis0, conge0, congm0, conibm0, conmsft0, conxom0)
+rownames(conint)=c("Confidence Intervals")
+conint
+
+```
+
+## 3 d
+Our the betas, alphas, and confidence interval lengths all seem to be relatively stable accross all of the iterations.
+```{r}
+##bootstrapping microsoft
+library(dplyr)
+msfta=numeric(1000)
+msftb=numeric(1000)
+msftdaup=numeric(1000)
+msftdbup=numeric(1000)
+msftdadown=numeric(1000)
+msftdbdown=numeric(1000)
+for(i in 1:1000){
+    samp=sample_n(capmdat, replace=T, 132)
+    bootlm=lm(samp$msft-samp$riskfree ~ (samp$mkt - samp$riskfree))
+    cofboot=cbind(coefficients(bootlm))
+    msfta[i]=cofboot[1]
+    msftb[i]=cofboot[2]
+    x=confint(bootlm)
+    msftdaup[i]=x[1,2]
+    msftdbup[i]=x[2,2]
+    msftdadown[i]=x[1,1]
+    msftdbdown[i]=x[1,2]
+}
+
+plot(msfta, ylab="Bootstrap Regression Intercept Values")
+plot(msftb, ylab="Bootstrap Regression Beta Values")
+plot(msftdaup-msftdadown, ylab="Bootstrap Regression Confidence Interval Length")
+```
+
+## 3 e
+
+```{r}
+mean(msfta)
+"alpha mean"
+hist(msfta,probability = T, main="Microsoft Intercept Value" )
+lines(density(msfta)) 
+abline(v = mean(msfta))
+
+sd(msfta)
+"alpha standard deviation"
+mean(msftb)
+"beta mean"
+hist(msftb,probability = T, main="Microsoft Beta Value")
+lines(density(msftb)) 
+abline(v = mean(msftb))
+
+sd(msftb)
+"beta standard deviation"
+mean(msftdaup-msftdadown)
+"alpha confidence interval mean"
+hist(msftdaup-msftdadown,probability = T, main="Microsfot Intercept Confidence Interval Length Value")
+lines(density(msftdaup-msftdadown))
+abline(v = mean(msftdaup-msftdadown))
+
+sd(msftdaup-msftdadown)
+"alpha confidence interval standard deviation"
+
+mean(msftdbup-msftdbdown)
+"beta confidence interval mean"
+hist(msftdbup-msftdbdown,probability = T, main="Microsoft Beta Confidence Interval Length Value")
+lines(density(msftdbup-msftdbdown))
+abline(v = mean(msftdbup-msftdbdown))
+
+sd(msftdbup-msftdbdown)
+"beta confidence interval standard deviation"
+```
+
+
+## 3 f
+The results of the bootstrap and original regression results are very close to each other. Forced to choose between the two we would favor the boostrapped results since the boostrapping process tells us more about the structure of the data and produces a distribution of the estimate instead of a single number.
+
+
+## 4 a
+
+$$P(C+|\>T+) = \frac{P(T+|\>C+)P(C+)}{P(T+|\>C+)P(C+)+P(T+|\>C-)P(C-)}$$
+$$P(C+|\>T+) = \frac{.99*.01}{.99*.01+.1*.99}$$
+$$P(C+|\>T+) = \frac{.99*.01}{.99*.01+.1*.99}$$
+$$P(C+|\>T+) = \frac{1}{11} = 9.091\%$$
+
+## 4 b
+
+```{r, fig.width=6, fig.height=6}
+library(ggplot2)
+probs = c()
+curprob = .01
+#probs = append(probs,curprob)
+
+while(curprob < .95){
+  curprob = (.99*curprob)/(.99*curprob+.1*(1-curprob))
+  #print(curprob)
+  probs = append(probs,curprob)
+}
+probs = data.frame(probability=probs)
+probs$id = row.names(probs)
+
+ggplot(probs, aes(id, probability,group = 1)) + 
+  geom_point(col='goldenrod',size=3) + 
+  geom_line(col='blue') +
+  xlab('Number of Tests') + ylab("Probability") +
+  ggtitle('Probability of Cancer') +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+It will only take 4 readings to know that there is a 95% chance that cancer is present.  We can see from that graph that the probability increases quickly after the first few trials.
+
+## 4 c
+
+$$P(C+|\>T-) = \frac{P(T-|\>C+)P(C+)}{P(T-|\>C+)P(C+)+P(T-|\>C-)P(C-)}$$
+```{r, fig.width=6, fig.height=6}
+probs = c()
+curprob = .01
+#probs = append(probs,curprob)
+trialnum = 1
+
+while(curprob < .95){
+  if(trialnum == 3){
+    curprob = (.01*curprob)/(.01*curprob+.9*(1-curprob))
+  }else{
+    curprob = (.99*curprob)/(.99*curprob+.1*(1-curprob))  
+  }
+  
+  #print(curprob)
+  probs = append(probs,curprob)
+  trialnum = trialnum+1
+}
+
+probs = data.frame(probability=probs)
+probs$id = row.names(probs)
+
+ggplot(probs, aes(id, probability,group = 1)) + 
+  xlab('Number of Tests') + ylab("Probability") +
+  ggtitle('Probability of Cancer') +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_point(col='goldenrod',size=3) + 
+  geom_line(col='blue') +
+  geom_point(data=probs[3, ], colour="red", size=5)
+```
+
+We still have to have four tests after the false negative to be 95% sure cancer is present.  The third reading brings us near our starting probability for cancer, so we from that point we only have to do as many tests as it took initially.  
